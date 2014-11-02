@@ -27,4 +27,13 @@ optional arguments:
   -v, --verbose         be a bit verbose
   -d, --debug           debug communication
 
-  
+
+Quick howto for OpenELEC:
+copy all files to /storage/.config/
+chmod +x /storage/.config/autostart.sh
+check in autostart.sh that your BLASTER_DEVICE is /dev/lirc1 (my MCEusb device is and it looks like the /dev/lirc0 is the rPI GPIO (optional) receiver)
+
+modify lircd.conf to your liking, perhaps learn some new ir-codes other than my LG tv and Sony Amplifier.
+I had to use: irrecord --device=/dev/lirc1 configfile
+
+I use irexec to convert my TV remote volume control buttons to my amplifier signals, which can now be nicely hidden as well.
