@@ -9,8 +9,8 @@ import signal
 server_address = '/run/lirc/lircd'
 eventlircd_address = '/run/lirc/eventlircd'
 lircd_address = '/run/lirc/lircd0'
-size=1024
-timeout=10
+size=4096
+timeout=1000
 debug=False
 verbose=False
 
@@ -85,14 +85,14 @@ while running:
       lircd.connect(lircd_address)
       input.append(lircd)
       if verbose:
-        print 'connected to %s' % lircd_address
+        print 'connected to lircd %s' % lircd_address
     except socket.error, msg:
       if verbose:
         print >>sys.stderr, '%s: %s' % (lircd_address,msg)
       lircd=None
 
   # process sockets
-  inputready,outputready,exceptready = select.select(input,[],[])
+  inputready,outputready,exceptready = select.select(input,[],[],timeout)
   for s in inputready:
     if s == server:
     # handle the server socket
@@ -102,9 +102,12 @@ while running:
       input.append(client)
       output.append(client)
     elif s == lircd:
+      if debug:
+        print "reading from lircd"
       try:
         data = s.recv(size)
       except:
+        print "failed to receive from lircd:"
         data=None
       if data:
         if debug:
@@ -115,9 +118,18 @@ while running:
           except:
             if verbose:
               print >>sys.stderr, 'failed to send data to client'
-            output.remove(s)
-            input.remove(s)
-            s.close()
+            try:
+              input.remove(o)
+            except:
+              print >>sys.stderr, 'could not cleanup input'
+            try:
+              o.close()
+            except:
+              print >>sys.stderr, 'could not close socket'
+            try:
+              output.remove(o)
+            except:
+              print >>sys.stderr, 'could not cleanup output'
       else:
         if verbose:
           print "connection to %s lost" % lircd_address
@@ -125,6 +137,8 @@ while running:
         input.remove(s)
         lircd=None
     elif s == eventlircd:
+      if debug:
+        print "reading from eventlircd"
       try:
         data = s.recv(size)
       except:
@@ -138,8 +152,8 @@ while running:
           except:
             if verbose:
               print >>sys.stderr, 'failed to send data to client'
-            output.remove(s)
-            input.remove(s)
+            output.remove(o)
+            input.remove(o)
             s.close()
       else:
         if verbose:
@@ -149,14 +163,53 @@ while running:
         eventlircd=None
     else:
       # handle all other sockets
-      data = s.recv(size)
+      try:
+        if debug:
+          print "reading from client"
+        data = s.recv(size)
+      except:
+        data = None
       if data:
         if debug:
           print "client: '%s'" % data
-        lircd.send(data)
+        if lircd:
+          try:
+            lircd.send(data)
+            if debug:
+              print "sent to lircd"
+            data=lircd.recv(size)
+            if debug:
+              print "read from lircd '%s'" % data
+          except:
+            print >>sys.stderr, 'failed to send data to lircd'
+            try:
+              lircd.close()
+            except:
+              if debug:
+                print "cannot close lircd"
+            lircd=None
+            data=None
+          try:
+            s.send(data)
+            if debug:
+              print "sent to client '%s'" % data
+          except:
+            print "cannot sent answer to client '%s'" % data
       else:
         if verbose:
           print "client disconnected"
-        s.close()
-        input.remove(s)
-        output.remove(s)
+	try:
+          s.close()
+        except:
+          if debug:
+            print "cannot close socket"
+        try:
+          input.remove(s)
+        except:
+          if debug:
+            print "cannot remove input"
+        try:
+          output.remove(s)
+        except:
+          if debug:
+            print "cannot remove output"
